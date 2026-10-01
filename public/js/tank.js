@@ -1,4 +1,6 @@
-// Tank: gövde + taret. Oyuncu ve AI ortak sınıfı.
+// Mermi hızı — global sabit (ai.js de kullanıyor)
+const BULLET_SPEED = 150; // oyuncu hızıyla aynı (px/sn)
+
 class Tank {
   constructor(x, y, color, isPlayer) {
     this.x = x;
@@ -7,22 +9,21 @@ class Tank {
     this.color = color;
     this.isPlayer = isPlayer;
 
-    this.bodyAngle = 0;    // gövde yönü (rad)
-    this.turretAngle = 0;  // taret yönü (rad)
+    this.bodyAngle = 0;
+    this.turretAngle = 0;
 
-    this.speed = 130;        // px/sn
-    this.rotSpeed = 6;       // gövde dönüş hızı (rad/sn)
-    this.turretRotSpeed = 7; // taret dönüş hızı (rad/sn)
+    this.speed = 130;
+    this.rotSpeed = 6;
+    this.turretRotSpeed = 7;
 
     this.hp = 3;
     this.maxHp = 3;
 
     this.shootCooldown = 0;
-    this.shootDelay = 0.7;   // atışlar arası minimum süre
+    this.shootDelay = isPlayer ? 5.0 : 2.0;
 
     this.alive = true;
 
-    // AI tarafından atanır
     this.aiMoveF = 0;
     this.aiMoveS = 0;
     this.aiTurretAngle = undefined;
@@ -35,16 +36,22 @@ class Tank {
     let moveF = 0, moveS = 0;
 
     if (this.isPlayer) {
+      // Klavye (PC)
       if (keys['w']) moveF += 1;
       if (keys['s']) moveF -= 1;
       if (keys['a']) moveS -= 1;
       if (keys['d']) moveS += 1;
-      // Taret: mouse'a doğru
-      this.turretAngle = Math.atan2(Input.mouse.y - this.y, Input.mouse.x - this.x);
+
+      // Fare nişanı (PC) — sadece mouse aktifse
+      if (Input.mouseActive && !Input.aimJoy.active) {
+        this.turretAngle = Math.atan2(
+          Input.mouse.y - this.y,
+          Input.mouse.x - this.x
+        );
+      }
     } else {
       moveF = this.aiMoveF;
       moveS = this.aiMoveS;
-      // Taret: AI tarafından belirlenen açıya yumuşak dönüş
       if (this.aiTurretAngle !== undefined) {
         const diff = this.angleDiff(this.turretAngle, this.aiTurretAngle);
         const step = Math.sign(diff) * Math.min(Math.abs(diff), this.turretRotSpeed * dt);
@@ -52,19 +59,16 @@ class Tank {
       }
     }
 
-    // Hareket (dünya uzayında)
     if (moveF !== 0 || moveS !== 0) {
       const len = Math.hypot(moveF, moveS);
       const dx = moveS / len;
       const dy = -moveF / len;
 
-      // Gövdeyi hareket yönüne döndür
       const targetAngle = Math.atan2(dy, dx);
       const diff = this.angleDiff(this.bodyAngle, targetAngle);
       const step = Math.sign(diff) * Math.min(Math.abs(diff), this.rotSpeed * dt);
       this.bodyAngle += step;
 
-      // Eksen-ayrık hareket (duvara takılırsa o eksende durur)
       const vx = dx * this.speed * dt;
       const vy = dy * this.speed * dt;
 
@@ -87,15 +91,14 @@ class Tank {
     if (this.shootCooldown > 0 || !this.alive) return null;
     this.shootCooldown = this.shootDelay;
 
-    const speed = 280;
     const muzzle = this.radius + 12;
     const bx = this.x + Math.cos(this.turretAngle) * muzzle;
     const by = this.y + Math.sin(this.turretAngle) * muzzle;
 
     return new Bullet(
       bx, by,
-      Math.cos(this.turretAngle) * speed,
-      Math.sin(this.turretAngle) * speed,
+      Math.cos(this.turretAngle) * BULLET_SPEED,
+      Math.sin(this.turretAngle) * BULLET_SPEED,
       this.isPlayer ? 'player' : 'ai'
     );
   }
@@ -111,7 +114,6 @@ class Tank {
     ctx.save();
     ctx.translate(this.x, this.y);
 
-    // Gövde
     ctx.save();
     ctx.rotate(this.bodyAngle);
     ctx.fillStyle = this.color;
@@ -121,7 +123,6 @@ class Tank {
     ctx.strokeRect(-14, -12, 28, 24);
     ctx.restore();
 
-    // Taret + namlu
     ctx.save();
     ctx.rotate(this.turretAngle);
     ctx.fillStyle = '#222222';
@@ -134,6 +135,22 @@ class Tank {
     ctx.lineWidth = 2;
     ctx.stroke();
     ctx.restore();
+
+    // Cooldown göstergesi (oyuncu için)
+    if (this.isPlayer && this.shootCooldown > 0) {
+      const pct = 1 - (this.shootCooldown / this.shootDelay);
+      ctx.beginPath();
+      ctx.arc(0, 0, 22, -Math.PI/2, -Math.PI/2 + Math.PI * 2 * pct);
+      ctx.strokeStyle = pct >= 1 ? '#44dd44' : '#ffaa22';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    } else if (this.isPlayer) {
+      ctx.beginPath();
+      ctx.arc(0, 0, 22, 0, Math.PI * 2);
+      ctx.strokeStyle = '#44dd44';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
 
     ctx.restore();
   }
