@@ -4,19 +4,29 @@ html, body {
   background: #111;
   color: #eee;
   font-family: 'Segoe UI', system-ui, sans-serif;
-  height: 100%;
+  height: 100dvh;
+  width: 100vw;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
+/* Kutu: 960x640 aspect ratio, ekrana sığar */
 #app {
   position: relative;
-  width: 960px;
-  height: 640px;
-  max-width: 100vw;
-  max-height: 100vh;
+  aspect-ratio: 960 / 640;
+  width: min(100vw, calc(100dvh * 1.5));
+  max-height: 100dvh;
+  container-type: size;
+  background: #ffffff;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
 }
 
 #game {
@@ -24,11 +34,11 @@ html, body {
   width: 100%;
   height: 100%;
   background: #f5f5f5;
-  border-radius: 6px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
   cursor: crosshair;
+  touch-action: none;
 }
 
+/* OVERLAY (menü, skor, gameover) */
 .overlay {
   position: absolute;
   inset: 0;
@@ -37,73 +47,77 @@ html, body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
   text-align: center;
-  padding: 30px;
+  padding: 4cqh 5cqw;
   overflow-y: auto;
+  gap: 1.5cqh;
+  touch-action: manipulation;
 }
 
 .overlay.hidden { display: none; }
 
+/* Yazı boyutları container'a göre ölçeklenir */
 h1 {
-  font-size: 64px;
+  font-size: 6.5cqw;
   color: #111;
-  letter-spacing: 2px;
-  margin-bottom: 6px;
+  letter-spacing: 0.3cqw;
+  line-height: 1;
 }
 h1 .red { color: #e22; }
 
 h2 {
-  font-size: 44px;
+  font-size: 4.5cqw;
   color: #111;
-  letter-spacing: 2px;
-  margin-bottom: 12px;
+  letter-spacing: 0.3cqw;
 }
 
 .sub {
   color: #666;
-  margin-bottom: 30px;
-  font-size: 16px;
+  font-size: 1.7cqw;
 }
 
 .difficulties {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  width: 380px;
+  gap: 1.6cqh;
+  width: 42cqw;
+  margin-top: 1.5cqh;
 }
 
 .diff {
-  padding: 18px 24px;
-  border: 3px solid #111;
+  padding: 2cqh 2cqw;
+  border: 0.35cqw solid #111;
   background: #fff;
   color: #111;
-  font-size: 22px;
+  font-size: 2.3cqw;
   font-weight: 800;
-  letter-spacing: 1px;
+  letter-spacing: 0.15cqw;
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: 1cqw;
   transition: transform 0.1s, background 0.15s, color 0.15s;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 0.4cqh;
   font-family: inherit;
+  touch-action: manipulation;
 }
 
 .diff .desc {
-  font-size: 13px;
+  font-size: 1.35cqw;
   font-weight: 400;
   color: #777;
   letter-spacing: 0;
 }
 
-.diff:hover:not(.locked) {
+.diff:hover:not(.locked),
+.diff:active:not(.locked) {
   background: #111;
   color: #fff;
   transform: translateY(-2px);
 }
-.diff:hover:not(.locked) .desc { color: #bbb; }
+.diff:hover:not(.locked) .desc,
+.diff:active:not(.locked) .desc { color: #bbb; }
 
 .diff.locked {
   opacity: 0.55;
@@ -118,96 +132,99 @@ h2 {
 .diff.shake { animation: shake 0.3s; }
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-6px); }
-  75% { transform: translateX(6px); }
+  25% { transform: translateX(-1cqw); }
+  75% { transform: translateX(1cqw); }
 }
 
-/* Genel buton */
 button {
   font-family: inherit;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .secondary {
-  margin-top: 22px;
-  padding: 12px 26px;
-  font-size: 16px;
+  margin-top: 1cqh;
+  padding: 1.5cqh 3cqw;
+  font-size: 1.7cqw;
   font-weight: 700;
-  letter-spacing: 1px;
-  border: 3px solid #111;
+  letter-spacing: 0.15cqw;
+  border: 0.35cqw solid #111;
   background: #fff;
   color: #111;
-  border-radius: 8px;
+  border-radius: 1cqw;
   transition: background 0.15s, color 0.15s;
 }
-.secondary:hover { background: #111; color: #fff; }
+.secondary:hover,
+.secondary:active { background: #111; color: #fff; }
 
 .danger {
-  padding: 12px 26px;
-  font-size: 16px;
+  padding: 1.5cqh 3cqw;
+  font-size: 1.7cqw;
   font-weight: 700;
-  letter-spacing: 1px;
-  border: 3px solid #cc1111;
+  letter-spacing: 0.15cqw;
+  border: 0.35cqw solid #cc1111;
   background: #fff;
   color: #cc1111;
-  border-radius: 8px;
+  border-radius: 1cqw;
   transition: background 0.15s, color 0.15s;
 }
-.danger:hover { background: #cc1111; color: #fff; }
+.danger:hover,
+.danger:active { background: #cc1111; color: #fff; }
 
-/* Game over butonları */
 #gameover button {
-  padding: 14px 30px;
-  font-size: 18px;
+  padding: 1.8cqh 3.5cqw;
+  font-size: 1.9cqw;
   font-weight: 800;
-  letter-spacing: 1px;
-  border: 3px solid #111;
+  letter-spacing: 0.15cqw;
+  border: 0.35cqw solid #111;
   background: #fff;
   color: #111;
-  border-radius: 8px;
+  border-radius: 1cqw;
 }
-#gameover button:hover { background: #111; color: #fff; }
+#gameover button:hover,
+#gameover button:active { background: #111; color: #fff; }
 #gameover #go-again { border-color: #2288dd; color: #2288dd; }
-#gameover #go-again:hover { background: #2288dd; color: #fff; }
+#gameover #go-again:hover,
+#gameover #go-again:active { background: #2288dd; color: #fff; }
 #gameover .secondary { margin-top: 0; }
 
 .btn-row {
   display: flex;
-  gap: 12px;
-  margin-top: 22px;
+  gap: 2cqw;
+  margin-top: 2cqh;
   justify-content: center;
   flex-wrap: wrap;
 }
 
-/* Skor tablosu */
+/* SKOR TABLOSU */
 .scores-table-wrap {
-  width: 100%;
-  max-width: 640px;
-  max-height: 360px;
+  width: 70cqw;
+  max-height: 45cqh;
   overflow-y: auto;
-  border: 3px solid #111;
-  border-radius: 8px;
+  border: 0.35cqw solid #111;
+  border-radius: 1cqw;
   background: #fafafa;
+  margin-top: 1cqh;
 }
 
 #scores-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 15px;
+  font-size: 1.5cqw;
 }
 
 #scores-table th {
   background: #111;
   color: #fff;
-  padding: 12px 8px;
+  padding: 1.2cqh 0.8cqw;
   font-weight: 800;
-  letter-spacing: 1px;
+  letter-spacing: 0.1cqw;
   position: sticky;
   top: 0;
 }
 
 #scores-table td {
-  padding: 10px 8px;
+  padding: 1cqh 0.8cqw;
   border-bottom: 1px solid #ddd;
   color: #222;
 }
@@ -219,3 +236,10 @@ button {
 #scores-table .d-normal { color: #2288dd; font-weight: 700; }
 #scores-table .d-zor { color: #ee8800; font-weight: 700; }
 #scores-table .d-impossible { color: #cc1111; font-weight: 700; }
+
+/* Mobilde daha büyük yazılar (çok küçük olmasın) */
+@media (max-width: 700px) {
+  .diff .desc { font-size: 2.5cqw; }
+  .sub { font-size: 3cqw; }
+  .diff { font-size: 4cqw; }
+}
