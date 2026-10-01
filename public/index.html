@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OsTankImposible</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <canvas id="game" width="960" height="640"></canvas>
+
+  <div id="menu" class="overlay">
+    <h1>OsTank<span class="red">Imposible</span></h1>
+    <p class="sub">Dünyanın en zor tank oyunu</p>
+
+    <div class="difficulties">
+      <button class="diff normal" data-diff="normal">
+        <span class="name">NORMAL</span>
+        <span class="desc">Isınma turu</span>
+      </button>
+
+      <button class="diff zor" data-diff="zor">
+        <span class="name">ZOR</span>
+        <span class="desc">Reflekslerini test et</span>
+      </button>
+
+      <button class="diff impossible locked" data-diff="impossible">
+        <span class="name">İMKANSIZ</span>
+        <span class="desc">Yakında...</span>
+      </button>
+    </div>
+  </div>
+
+  <div id="gameover" class="overlay hidden">
+    <h2 id="go-title">Kaybettin!</h2>
+    <p id="go-sub">Tekrar dene.</p>
+    <button id="go-btn">MENÜYE DÖN</button>
+  </div>
+</div>
+
+<script src="js/input.js"></script>
+<script src="js/maze.js"></script>
+<script src="js/bullet.js"></script>
+<script src="js/tank.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
