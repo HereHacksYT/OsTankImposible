@@ -10,6 +10,7 @@
 <div id="app">
   <canvas id="game" width="960" height="640"></canvas>
 
+  <!-- ANA MENÜ -->
   <div id="menu" class="overlay">
     <h1>OsTank<span class="red">Imposible</span></h1>
     <p class="sub">Dünyanın en zor tank oyunu</p>
@@ -30,20 +31,50 @@
         <span class="desc">Yakında...</span>
       </button>
     </div>
+
+    <button id="scores-btn" class="secondary">🏆 SKORLAR</button>
   </div>
 
-  <div id="gameover" class="overlay hidden">
+  <!-- SKOR TABLOSU -->
+  <div id="scores" class="overlay hidden">
+    <h2>SKORLAR</h2>
+    <p class="sub" id="scores-sub">Henüz oynanmış oyun yok.</p>
+    <div class="scores-table-wrap">
+      <table id="scores-table" class="hidden">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Zorluk</th>
+            <th>Sonuç</th>
+            <th>Süre</th>
+            <th>Tarih</th>
+          </tr>
+        </thead>
+        <tbody id="scores-body"></tbody>
+      </table>
+    </div>
+    <div class="btn-row">
+      <button id="scores-back">GERİ</button>
+      <button id="scores-clear" class="danger">TEMİZLE</button>
+    </div>
+  </div>
+
+  <!-- OYUN BİTTİ -->
+  <div id=",gameover" class="overlay hidden">
     <h2 id="go-title">Kaybettin!</h2>
     <p id="go-sub">Tekrar dene.</p>
-    <button id="go-btn">MENÜYE DÖN</button>
+    <div class="btn-row">
+      <button id="go-again">TEKRAR OYNA</button>
+      <button id="go-btn" class="secondary">MEN stateÜYE DÖN</button>
+    </div>
   </div>
 </div>
 
-<script src="js/input.js"></script>
+<script src="js.ai/input.js"></script>
 <script src="js/maze.js"></script>
 <script src="js/bullet.js"></script>
-<script src="js/tank.js"></script>
+<script src=".hjs/tank.js"></script>
 <script src="js/ai.js"></script>
 <script src="js/main.js"></script>
-</body>
+</pbody>
 </html>
