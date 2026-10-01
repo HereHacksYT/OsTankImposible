@@ -26,11 +26,11 @@ const AI = {
       leadPrediction: true,
       leadFactor: 1.0,
       raycast: true,
-      raycastInterval: 0.08,
-      posInterval: 0.45,
+      raycastInterval: 0.10,   // atış için ışın taraması
+      posInterval: 0.55,       // pozisyon optimizasyonu
       maxBounces: 3,
       dodge: true,
-      speedBoost: 180,
+      // hız ve atış cooldown değişmiyor!
     },
   },
 
@@ -39,6 +39,17 @@ const AI = {
     if (!tank.alive || !player.alive) return newBullets;
 
     const cfg = this.configs[difficulty] || this.configs.normal;
+
+    // Oyuncunun hızını yumuşat (zikzak koruması)
+    if (player._pvx !== undefined) {
+      if (player._smoothVx === undefined) {
+        player._smoothVx = player._pvx;
+        player._smoothVy = player._pvy;
+      } else {
+        player._smoothVx = player._smoothVx * 0.7 + player._pvx * 0.3;
+        player._smoothVy = player._smoothVy * 0.7 + player._pvy * 0.3;
+      }
+    }
 
     tank._thinkTimer   = (tank._thinkTimer   || 0) - dt;
     tank._shootTimer   = (tank._shootTimer   || 0) - dt;
@@ -54,82 +65,42 @@ const AI = {
     return newBullets;
   },
 
-  // ================= İMKANSIZ =================
+  // ==================== İMKANSIZ ====================
   _updateImpossible(tank, player, dt, cfg, newBullets, bullets) {
-    // Hız artışı
-    tank.speed = cfg.speedBoost;
+    // Yumuşatılmış hız (daha akıllı tahmin)
+    const pvx = player._smoothVx || 0;
+    const pvy = player._smoothVy || 0;
 
-    // === 1) RAYCAST ===
+    // Oyuncu mermileri
+    const enemyBullets = bullets.filter(b => b.owner === 'player');
+
+    // === 1) AKTİF TEHDİT KONTROLÜ (şimdi + biraz sonra) ===
+    const threatened = enemyBullets.length > 0 && (
+      RayCast.isPositionUnsafe(tank.x, tank.y, tank.radius + 6, enemyBullets, 0.9)
+    );
+
+    if (threatened) {
+      this._evade(tank, player, cfg, enemyBullets, newBullets);
+      return;
+    }
+
+    // === 2) ATIŞ RAYCAST ===
     if (tank._raycastTimer <= 0) {
       tank._raycastTimer = cfg.raycastInterval;
       tank._bestShots = RayCast.findBestShots(
         tank.x, tank.y, player,
-        player._pvx || 0, player._pvy || 0,
+        pvx, pvy,
         cfg.maxBounces, 80
       );
     }
 
-    // === 2) POZİSYON OPTİMİZASYONU (seyrek) ===
+    // === 3) POZİSYON OPTİMİZASYONU ===
     if (tank._posTimer <= 0) {
       tank._posTimer = cfg.posInterval;
-      const best = RayCast.findBestPosition(tank, player, bullets, cfg.maxBounces);
-      if (best) tank._bestPos = best;
+      tank._bestPos = RayCast.findBestPosition(tank, player, bullets, cfg.maxBounces);
     }
 
-    // === 3) THREAT: gelen mermi var mı? ===
-    const enemyBullets = bullets.filter(b => b.owner === 'player');
-    let threatened = false;
-    if (enemyBullets.length > 0) {
-      threatened = RayCast.isDangerousAt(
-        tank.x, tank.y, tank.radius + 8,
-        enemyBullets, 1.2
-      );
-    }
-
-    if (threatened) {
-      // Güvenli yöne kaç
-      const safeDirs = RayCast.findSafeDirections(tank, enemyBullets, 1.2);
-      if (safeDirs.length > 0) {
-        // En yakın güvenli yön (mevcut yönde devam etmeyi tercih et)
-        let bestDir = safeDirs[0];
-        let bestScore = Infinity;
-        for (const d of safeDirs) {
-          const dx = d.x - tank.x;
-          const dy = d.y - tank.y;
-          // Body angle ile uyum skoru
-          const moveAngle = Math.atan2(dy, dx);
-          let diff = moveAngle - tank.bodyAngle;
-          while (diff > Math.PI) diff -= Math.PI * 2;
-          while (diff < -Math.PI) diff += Math.PI * 2;
-          const score = Math.abs(diff);
-          if (score < bestScore) {
-            bestScore = score;
-            bestDir = d;
-          }
-        }
-        const dx = bestDir.x - tank.x;
-        const dy = bestDir.y - tank.y;
-        const len = Math.hypot(dx, dy) || 1;
-        tank.aiMoveF = -dy / len;
-        tank.aiMoveS = dx / len;
-      } else {
-        // Sıkıştık: geri git + strafe
-        tank.aiMoveF = -1;
-        tank.aiMoveS = (Math.random() < 0.5 ? 1 : -1) * 1.0;
-      }
-
-      // Yine de ateş edebiliyorsak et (kaçarken bile)
-      if (tank._bestShots && tank._bestShots.length > 0 && tank._shootTimer <= 0) {
-        const best = tank._bestShots[0];
-        tank.aiTurretAngle = best.angle;
-        const b = tank.shoot();
-        if (b) newBullets.push(b);
-        tank._shootTimer = cfg.shootInterval;
-      }
-      return;
-    }
-
-    // === 4) ATIŞ VAR MI? ===
+    // === 4) DAVRANIŞ ===
     const shots = tank._bestShots || [];
 
     if (shots.length > 0) {
@@ -137,63 +108,138 @@ const AI = {
       const err = (Math.random() - 0.5) * 2 * cfg.aimError;
       tank.aiTurretAngle = best.angle + err;
 
+      // Ateş
       if (tank._shootTimer <= 0) {
         const b = tank.shoot();
         if (b) newBullets.push(b);
         tank._shootTimer = cfg.shootInterval;
       }
 
-      // Best position'a git (varsa)
-      if (tank._bestPos &&
-          Math.hypot(tank._bestPos.x - tank.x, tank._bestPos.y - tank.y) > 20) {
-        const dx = tank._bestPos.x - tank.x;
-        const dy = tank._bestPos.y - tank.y;
-        const len = Math.hypot(dx, dy);
-        tank.aiMoveF = -dy / len;
-        tank.aiMoveS = dx / len;
-      } else {
-        // Strafe (zor hedef olmak için)
-        if (!tank._strafe || Math.random() < 0.08) {
-          tank._strafe = Math.random() < 0.5 ? 1 : -1;
-        }
-        tank.aiMoveF = 0;
-        tank.aiMoveS = tank._strafe * 1.0;
-      }
+      // Pozisyona git
+      this._moveTowards(tank, tank._bestPos, cfg);
+
     } else {
-      // === 5) VURUŞ YOK → OYUNCUYA YAKLAŞ ===
+      // Vuruş yok → oyuncuya yaklaş (akıllı rota: LOS bulana kadar)
       tank.aiMoveF = 1;
-      if (!tank._strafe || Math.random() < 0.12) {
+      if (!tank._strafe || Math.random() < 0.10) {
         tank._strafe = Math.random() < 0.5 ? 1 : -1;
       }
       tank.aiMoveS = tank._strafe * 0.6;
 
       if (tank._thinkTimer <= 0) {
         tank._thinkTimer = cfg.reactionTime;
+        // Kabaca yön (direkt vuruş denemesi)
         tank.aiTurretAngle = Math.atan2(player.y - tank.y, player.x - tank.x);
       }
     }
 
-    // === 6) AKILLI DODGE ===
-    // Oyuncunun turret açısı bize bakıyor mu VE ateş edebilir durumda mı?
-    if (cfg.dodge && player.shootCooldown < 1.5) {
-      const playerToAI = Math.atan2(tank.y - player.y, tank.x - player.x);
-      let diff = player.turretAngle - playerToAI;
-      while (diff > Math.PI) diff -= Math.PI * 2;
-      while (diff < -Math.PI) diff += Math.PI * 2;
-
-      // Oyuncunun bize direkt görüşü var mı?
+    // === 5) YAKIN TEHDİT İÇİN ÖN HAZIRLIK ===
+    // Oyuncu ateş edebilir durumdaysa ve bize bakıyorsa, ufak dodge hazırlığı
+    if (player.shootCooldown < 1.5) {
       const los = this.hasLineOfSight(player, tank);
+      if (los) {
+        const playerToAI = Math.atan2(tank.y - player.y, tank.x - player.x);
+        let diff = player.turretAngle - playerToAI;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
 
-      if (los && Math.abs(diff) < 0.35) {
-        // Ateş edecek! Yana kaç
-        tank._strafe = Math.random() < 0.5 ? 1 : -1;
-        tank.aiMoveS = tank._strafe * 1.3;
-        if (tank.aiMoveF > 0) tank.aiMoveF = -0.4;
+        if (Math.abs(diff) < 0.4) {
+          // Ateş edecek! Ufak strafe
+          if (tank.aiMoveS < 0.3 && tank.aiMoveS > -0.3) {
+            tank._strafe = Math.random() < 0.5 ? 1 : -1;
+            tank.aiMoveS = tank._strafe * 0.9;
+          }
+        }
       }
     }
   },
 
-  // ================= NORMAL / ZOR =================
+  // === AKILLI KAÇIŞ ===
+  _evade(tank, player, cfg, enemyBullets, newBullets) {
+    // Çevredeki 16 yönü tara, en güvenli olanı seç
+    const candidates = [];
+    const R = 90;
+
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      const x = tank.x + Math.cos(a) * R;
+      const y = tank.y + Math.sin(a) * R;
+      if (Maze.circleHitsWall(x, y, tank.radius)) continue;
+
+      const safe1 = !RayCast.isPositionUnsafe(x, y, tank.radius + 4, enemyBullets, 0.6);
+      const safe2 = !RayCast.isPositionUnsafe(x, y, tank.radius + 4, enemyBullets, 1.5);
+      let score = 0;
+      if (safe1) score += 5;
+      if (safe2) score += 3;
+
+      // Mevcut yönde devam etme bonusu (ani dönüşler ölümcül)
+      const dist = Math.hypot(x - tank.x, y - tank.y);
+      score -= dist * 0.02;
+
+      // Köşe kaçış bonusu (duvardan uzaklaş)
+      let openDirs = 0;
+      for (let j = 0; j < 8; j++) {
+        const a2 = (j / 8) * Math.PI * 2;
+        const ex = x + Math.cos(a2) * 55;
+        const ey = y + Math.sin(a2) * 55;
+        if (!Maze.circleHitsWall(ex, ey, tank.radius)) openDirs++;
+      }
+      score += openDirs * 0.4;
+
+      candidates.push({ x, y, score });
+    }
+
+    candidates.sort((a, b) => b.score - a.score);
+
+    if (candidates.length > 0) {
+      const best = candidates[0];
+      const dx = best.x - tank.x;
+      const dy = best.y - tank.y;
+      const len = Math.hypot(dx, dy) || 1;
+      tank.aiMoveF = -dy / len;
+      tank.aiMoveS = dx / len;
+    } else {
+      // Sıkıştık: geri git
+      tank.aiMoveF = -1;
+      tank.aiMoveS = (Math.random() < 0.5 ? 1 : -1);
+    }
+
+    // Kaçarken bile ateş edebiliyorsa et (opportunistic)
+    if (tank._bestShots && tank._bestShots.length > 0 && tank._shootTimer <= 0) {
+      const best = tank._bestShots[0];
+      tank.aiTurretAngle = best.angle;
+      const b = tank.shoot();
+      if (b) newBullets.push(b);
+      tank._shootTimer = cfg.shootInterval;
+    }
+  },
+
+  // === Hedefe doğru hareket et ===
+  _moveTowards(tank, target, cfg) {
+    if (!target) {
+      tank.aiMoveF = 0;
+      tank.aiMoveS = 0;
+      return;
+    }
+    const dx = target.x - tank.x;
+    const dy = target.y - tank.y;
+    const len = Math.hypot(dx, dy);
+
+    if (len < 15) {
+      // Yerinde dur, hafif strafe
+      if (!tank._strafe || Math.random() < 0.06) {
+        tank._strafe = Math.random() < 0.5 ? 1 : -1;
+      }
+      tank.aiMoveF = 0;
+      tank.aiMoveS = tank._strafe * 0.8;
+      return;
+    }
+
+    tank.aiMoveF = -dy / len;
+    tank.aiMoveS = dx / len;
+  },
+
+  // ==================== NORMAL / ZOR ====================
   _updateNormal(tank, player, dt, cfg, newBullets) {
     if (tank._thinkTimer <= 0) {
       tank._thinkTimer = cfg.reactionTime;
@@ -239,8 +285,8 @@ const AI = {
     let py = player.y;
 
     if (cfg.leadPrediction && player._pvx !== undefined) {
-      px += player._pvx * time * cfg.leadFactor;
-      py += player._pvy * time * cfg.leadFactor;
+      px += (player._smoothVx || player._pvx) * time * cfg.leadFactor;
+      py += (player._smoothVy || player._pvy) * time * cfg.leadFactor;
     }
 
     return Math.atan2(py - tank.y, px - tank.x);
