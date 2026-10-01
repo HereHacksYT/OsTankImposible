@@ -5,7 +5,7 @@ const H = canvas.height;
 
 Input.init(canvas);
 
-// --- SKOR SİSTEMİ (localStorage) ---
+// --- SKOR SİSTEMİ ---
 const SCORES_KEY = 'ostank_scores';
 
 const Scores = {
@@ -13,32 +13,23 @@ const Scores = {
     try {
       const raw = localStorage.getItem(SCORES_KEY);
       return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
+    } catch { return []; }
   },
-
   save(entry) {
     const all = this.load();
     all.unshift(entry);
-    // En fazla 50 kayıt tut
     const trimmed = all.slice(0, 50);
-    try {
-      localStorage.setItem(SCORES_KEY, JSON.stringify(trimmed));
-    } catch {}
+    try { localStorage.setItem(SCORES_KEY, JSON.stringify(trimmed)); } catch {}
   },
-
   clear() {
     try { localStorage.removeItem(SCORES_KEY); } catch {}
   },
-
   formatDuration(sec) {
     sec = Math.max(0, Math.floor(sec));
     const m = Math.floor(sec / 60);
     const s = sec % 60;
     return `${m}:${String(s).padStart(2, '0')}`;
   },
-
   formatDate(ts) {
     const d = new Date(ts);
     const dd = String(d.getDate()).padStart(2, '0');
@@ -49,9 +40,8 @@ const Scores = {
   },
 };
 
-// --- OYUN DURUMU ---
 const state = {
-  mode: 'menu',       // 'menu' | 'playing' | 'over'
+  mode: 'menu',
   difficulty: null,
   player: null,
   ai: null,
@@ -60,6 +50,14 @@ const state = {
   startTime: 0,
   result: null,
 };
+
+// --- BUTON BAĞLAMA (pointerdown → mobilde de çalışır) ---
+function bindTap(el, handler) {
+  el.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    handler(e);
+  });
+}
 
 function startGame(difficulty) {
   Maze.generate();
@@ -97,23 +95,21 @@ function startGame(difficulty) {
 
 function loop(now) {
   if (state.mode !== 'playing') return;
-
   const dt = Math.min((now - state.lastTime) / 1000, 0.05);
   state.lastTime = now;
-
   update(dt);
   render();
-
-  if (state.mode === 'playing') {
-    requestAnimationFrame(loop);
-  }
+  if (state.mode === 'playing') requestAnimationFrame(loop);
 }
 
 function update(dt) {
   const p = state.player;
   const a = state.ai;
 
-  // Oyuncunun hız vektörünü kaydet (AI tahmini için)
+  // Dokunmatik hareket → WASD
+  Input.applyTouchMovement(p);
+
+  // Oyuncu hız vektörü (AI tahmini için)
   if (p._lastX !== undefined) {
     p._pvx = (p.x - p._lastX) / dt;
     p._pvy = (p.y - p._lastY) / dt;
@@ -123,7 +119,6 @@ function update(dt) {
 
   p.update(dt, Input.keys);
   a.update(dt, {});
-
   AI.update(a, p, dt, state.difficulty);
 
   // Oyuncu ateş
@@ -132,14 +127,13 @@ function update(dt) {
     if (b) state.bullets.push(b);
   }
 
-  // Mermileri güncelle + çarpışma
+  // Mermiler
   for (const b of state.bullets) {
     b.update(dt);
-
     const target = b.owner === 'player' ? a : p;
     if (target.alive) {
       const d = Math.hypot(b.x - target.x, b.y - target.y);
-      if (d state < target.radius + b.radius) {
+      if (d < target.radius + b.radius) {
         target.takeDamage();
         b.dead = true;
       }
@@ -148,7 +142,6 @@ function update(dt) {
 
   state.bullets = state.bullets.filter(b => !b.dead);
 
-  // Oyun bitti mi?
   if (!p.alive || !a.alive) {
     state.mode = 'over';
     state.result = p.alive ? 'win' : 'lose';
@@ -171,14 +164,13 @@ function render() {
 
 function drawUI() {
   drawHP(20, 20, state.player.hp, state.player.maxHp, '#4aa3ff', 'SEN');
-  drawHP(W - 220, 20.ai.maxHp, '#ff4444', 'DÜŞMAN');
+  drawHP(W - 220, 20, state.ai.hp, state.ai.maxHp, '#ff4444', 'DÜŞMAN');
 }
 
 function drawHP(x, y, hp, maxHp, color, label) {
   ctx.fillStyle = '#111';
   ctx.font = 'bold 16px sans-serif';
   ctx.fillText(label, x, y - 6);
-
   for (let i = 0; i < maxHp; i++) {
     ctx.fillStyle = i < hp ? color : '#cccccc';
     ctx.fillRect(x + i * 45, y, 40, 20);
@@ -191,7 +183,6 @@ function drawHP(x, y, hp, maxHp, color, label) {
 function onGameOver() {
   const duration = (performance.now() - state.startTime) / 1000;
 
-  // Skoru kaydet
   Scores.save({
     difficulty: state.difficulty,
     result: state.result,
@@ -216,7 +207,6 @@ function onGameOver() {
   el.classList.remove('hidden');
 }
 
-// --- SKOR TABLOSU RENDER ---
 function renderScores() {
   const list = Scores.load();
   const sub = document.getElementById('scores-sub');
@@ -237,12 +227,10 @@ function renderScores() {
 
   list.forEach((s, i) => {
     const tr = document.createElement('tr');
-
     const dLabel = s.difficulty === 'zor' ? 'ZOR'
                  : s.difficulty === 'normal' ? 'NORMAL'
                  : s.difficulty === 'impossible' ? 'İMKANSIZ'
                  : s.difficulty;
-
     tr.innerHTML = `
       <td>${i + 1}</td>
       <td class="d-${s.difficulty}">${dLabel}</td>
@@ -254,9 +242,9 @@ function renderScores() {
   });
 }
 
-// --- MENÜ OLAYLARI ---
+// --- MENÜ BUTONLARI (pointerdown) ---
 document.querySelectorAll('.diff').forEach((btn) => {
-  btn.addEventListener('click', () => {
+  bindTap(btn, () => {
     if (btn.classList.contains('locked')) {
       btn.classList.add('shake');
       setTimeout(() => btn.classList.remove('shake'), 300);
@@ -266,30 +254,30 @@ document.querySelectorAll('.diff').forEach((btn) => {
   });
 });
 
-document.getElementById('scores-btn').addEventListener('click', () => {
+bindTap(document.getElementById('scores-btn'), () => {
   renderScores();
   document.getElementById('menu').classList.add('hidden');
   document.getElementById('scores').classList.remove('hidden');
 });
 
-document.getElementById('scores-back').addEventListener('click', () => {
+bindTap(document.getElementById('scores-back'), () => {
   document.getElementById('scores').classList.add('hidden');
   document.getElementById('menu').classList.remove('hidden');
 });
 
-document.getElementById('scores-clear').addEventListener('click', () => {
+bindTap(document.getElementById('scores-clear'), () => {
   if (confirm('Tüm skorlar silinsin mi?')) {
     Scores.clear();
     renderScores();
   }
 });
 
-document.getElementById('go-btn').addEventListener('click', () => {
+bindTap(document.getElementById('go-btn'), () => {
   state.mode = 'menu';
   document.getElementById('gameover').classList.add('hidden');
   document.getElementById('menu').classList.remove('hidden');
 });
 
-document.getElementById('go-again').addEventListener('click', () => {
+bindTap(document.getElementById('go-again'), () => {
   startGame(state.difficulty);
 });
