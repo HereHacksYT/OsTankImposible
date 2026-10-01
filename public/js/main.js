@@ -105,7 +105,7 @@ function update(dt) {
   const p = state.player;
   const a = state.ai;
 
-  // Joystick → WASD tuşlarına çevir
+  // Joystick → WASD
   if (Input.moveJoy.active) {
     const v = Input.getMoveVector();
     Input.keys['a'] = v.x < -0.3;
@@ -124,7 +124,7 @@ function update(dt) {
 
   p.update(dt, Input.keys);
 
-  // Joystick nişanı (mobilden)
+  // Aim joystick: sürükleme sırasında turret yönünü güncelle
   if (Input.aimJoy.active) {
     const a2 = Input.getAimAngle();
     if (a2 !== null) p.turretAngle = a2;
@@ -132,18 +132,22 @@ function update(dt) {
 
   a.update(dt, {});
 
-  // AI güncelle → ürettiği mermileri topla (BUG FIX)
+  // AI mermileri
   const aiBullets = AI.update(a, p, dt, state.difficulty);
   if (aiBullets && aiBullets.length) state.bullets.push(...aiBullets);
 
-  // Oyuncu ateş: PC (mouse basılı) veya mobil (joystick bırakınca)
-  if (Input.mouse.down) {
+  // Oyuncu ateş
+  // PC: mouse basılı
+  if (Input.mouse.down && !Input.isTouch) {
     const b = p.shoot();
     if (b) state.bullets.push(b);
   }
+  // Mobil: aim joystick bırakınca
   if (Input.consumeFire()) {
+    if (Input.fireAngle !== null) p.turretAngle = Input.fireAngle; // ← açıyı sabitle
     const b = p.shoot();
     if (b) state.bullets.push(b);
+    Input.fireAngle = null;
   }
 
   // Mermiler
@@ -189,8 +193,6 @@ function drawJoysticks() {
 
 function drawJoystick(joy, rgb) {
   if (!joy.active) return;
-
-  // Base
   ctx.beginPath();
   ctx.arc(joy.baseX, joy.baseY, Input.JOY_RADIUS, 0, Math.PI * 2);
   ctx.fillStyle = `rgba(${rgb},0.12)`;
@@ -199,7 +201,6 @@ function drawJoystick(joy, rgb) {
   ctx.lineWidth = 3;
   ctx.stroke();
 
-  // Knob
   ctx.beginPath();
   ctx.arc(joy.knobX, joy.knobY, Input.KNOB_RADIUS, 0, Math.PI * 2);
   ctx.fillStyle = `rgba(${rgb},0.65)`;
@@ -213,14 +214,10 @@ function drawUI() {
   drawHP(20, 20, state.player.hp, state.player.maxHp, '#4aa3ff', 'SEN');
   drawHP(W - 220, 20, state.ai.hp, state.ai.maxHp, '#ff4444', 'DÜŞMAN');
 
-  // Cooldown metni
   if (state.player.shootCooldown > 0) {
     ctx.fillStyle = '#ff8800';
     ctx.font = 'bold 14px sans-serif';
-    ctx.fillText(
-      `ATEŞ BEKLEME: ${state.player.shootCooldown.toFixed(1)}s`,
-      20, 70
-    );
+    ctx.fillText(`ATEŞ BEKLEME: ${state.player.shootCooldown.toFixed(1)}s`, 20, 70);
   } else {
     ctx.fillStyle = '#22aa22';
     ctx.font = 'bold 14px sans-serif';
@@ -303,7 +300,6 @@ function renderScores() {
   });
 }
 
-// Menü butonları
 document.querySelectorAll('.diff').forEach((btn) => {
   bindTap(btn, () => {
     if (btn.classList.contains('locked')) {
