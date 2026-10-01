@@ -1,5 +1,4 @@
-// Mermi hızı — global sabit (ai.js de kullanıyor)
-const BULLET_SPEED = 150; // oyuncu hızıyla aynı (px/sn)
+const BULLET_SPEED = 150; // piksel/saniye
 
 class Tank {
   constructor(x, y, color, isPlayer) {
@@ -36,14 +35,13 @@ class Tank {
     let moveF = 0, moveS = 0;
 
     if (this.isPlayer) {
-      // Klavye (PC)
       if (keys['w']) moveF += 1;
       if (keys['s']) moveF -= 1;
       if (keys['a']) moveS -= 1;
       if (keys['d']) moveS += 1;
 
-      // Fare nişanı (PC) — sadece mouse aktifse
-      if (Input.mouseActive && !Input.aimJoy.active) {
+      // Fare nişanı: SADECE mouse modundaysa (touch'ta devre dışı)
+      if (!Input.isTouch && Input.mouseActive && !Input.aimJoy.active) {
         this.turretAngle = Math.atan2(
           Input.mouse.y - this.y,
           Input.mouse.x - this.x
@@ -136,20 +134,22 @@ class Tank {
     ctx.stroke();
     ctx.restore();
 
-    // Cooldown göstergesi (oyuncu için)
-    if (this.isPlayer && this.shootCooldown > 0) {
-      const pct = 1 - (this.shootCooldown / this.shootDelay);
-      ctx.beginPath();
-      ctx.arc(0, 0, 22, -Math.PI/2, -Math.PI/2 + Math.PI * 2 * pct);
-      ctx.strokeStyle = pct >= 1 ? '#44dd44' : '#ffaa22';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-    } else if (this.isPlayer) {
-      ctx.beginPath();
-      ctx.arc(0, 0, 22, 0, Math.PI * 2);
-      ctx.strokeStyle = '#44dd44';
-      ctx.lineWidth = 3;
-      ctx.stroke();
+    // Oyuncu cooldown göstergesi
+    if (this.isPlayer) {
+      if (this.shootCooldown > 0) {
+        const pct = 1 - (this.shootCooldown / this.shootDelay);
+        ctx.beginPath();
+        ctx.arc(0, 0, 22, -Math.PI/2, -Math.PI/2 + Math.PI * 2 * pct);
+        ctx.strokeStyle = '#ffaa22';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.arc(0, 0, 22, 0, Math.PI * 2);
+        ctx.strokeStyle = '#44dd44';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      }
     }
 
     ctx.restore();
