@@ -51,7 +51,6 @@ const state = {
   result: null,
 };
 
-// --- BUTON BAĞLAMA (pointerdown → mobilde de çalışır) ---
 function bindTap(el, handler) {
   el.addEventListener('pointerdown', (e) => {
     e.preventDefault();
@@ -73,7 +72,7 @@ function startGame(difficulty) {
     Maze.TILE * 2.5,
     '#ff4444', false
   );
-  aiTank.shootDelay = AI.configs[difficulty]?.shootInterval || 1.5;
+  aiTank.shootDelay = AI.configs[difficulty]?.shootInterval || 4.0;
 
   state.player = player;
   state.ai = aiTank;
@@ -106,10 +105,16 @@ function update(dt) {
   const p = state.player;
   const a = state.ai;
 
-  // Dokunmatik hareket → WASD
-  Input.applyTouchMovement(p);
+  // Joystick → WASD tuşlarına çevir
+  if (Input.moveJoy.active) {
+    const v = Input.getMoveVector();
+    Input.keys['a'] = v.x < -0.3;
+    Input.keys['d'] = v.x > 0.3;
+    Input.keys['w'] = v.y < -0.3;
+    Input.keys['s'] = v.y > 0.3;
+  }
 
-  // Oyuncu hız vektörü (AI tahmini için)
+  // Hız vektörü (AI tahmini için)
   if (p._lastX !== undefined) {
     p._pvx = (p.x - p._lastX) / dt;
     p._pvy = (p.y - p._lastY) / dt;
@@ -118,11 +123,25 @@ function update(dt) {
   p._lastY = p.y;
 
   p.update(dt, Input.keys);
-  a.update(dt, {});
-  AI.update(a, p, dt, state.difficulty);
 
-  // Oyuncu ateş
+  // Joystick nişanı (mobilden)
+  if (Input.aimJoy.active) {
+    const a2 = Input.getAimAngle();
+    if (a2 !== null) p.turretAngle = a2;
+  }
+
+  a.update(dt, {});
+
+  // AI güncelle → ürettiği mermileri topla (BUG FIX)
+  const aiBullets = AI.update(a, p, dt, state.difficulty);
+  if (aiBullets && aiBullets.length) state.bullets.push(...aiBullets);
+
+  // Oyuncu ateş: PC (mouse basılı) veya mobil (joystick bırakınca)
   if (Input.mouse.down) {
+    const b = p.shoot();
+    if (b) state.bullets.push(b);
+  }
+  if (Input.consumeFire()) {
     const b = p.shoot();
     if (b) state.bullets.push(b);
   }
@@ -159,12 +178,54 @@ function render() {
   state.ai.draw(ctx);
   state.player.draw(ctx);
 
+  drawJoysticks();
   drawUI();
+}
+
+function drawJoysticks() {
+  drawJoystick(Input.moveJoy, '74,163,255');
+  drawJoystick(Input.aimJoy,  '255,68,68');
+}
+
+function drawJoystick(joy, rgb) {
+  if (!joy.active) return;
+
+  // Base
+  ctx.beginPath();
+  ctx.arc(joy.baseX, joy.baseY, Input.JOY_RADIUS, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(${rgb},0.12)`;
+  ctx.fill();
+  ctx.strokeStyle = `rgba(${rgb},0.55)`;
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // Knob
+  ctx.beginPath();
+  ctx.arc(joy.knobX, joy.knobY, Input.KNOB_RADIUS, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(${rgb},0.65)`;
+  ctx.fill();
+  ctx.strokeStyle = `rgba(${rgb},0.95)`;
+  ctx.lineWidth = 3;
+  ctx.stroke();
 }
 
 function drawUI() {
   drawHP(20, 20, state.player.hp, state.player.maxHp, '#4aa3ff', 'SEN');
   drawHP(W - 220, 20, state.ai.hp, state.ai.maxHp, '#ff4444', 'DÜŞMAN');
+
+  // Cooldown metni
+  if (state.player.shootCooldown > 0) {
+    ctx.fillStyle = '#ff8800';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.fillText(
+      `ATEŞ BEKLEME: ${state.player.shootCooldown.toFixed(1)}s`,
+      20, 70
+    );
+  } else {
+    ctx.fillStyle = '#22aa22';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.fillText('ATEŞ HAZIR', 20, 70);
+  }
 }
 
 function drawHP(x, y, hp, maxHp, color, label) {
@@ -242,7 +303,7 @@ function renderScores() {
   });
 }
 
-// --- MENÜ BUTONLARI (pointerdown) ---
+// Menü butonları
 document.querySelectorAll('.diff').forEach((btn) => {
   bindTap(btn, () => {
     if (btn.classList.contains('locked')) {
