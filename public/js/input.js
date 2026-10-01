@@ -2,13 +2,13 @@ const Input = {
   keys: {},
   mouse: { x: 480, y: 320, down: false },
   mouseActive: false,
+  isTouch: false,     // ilk dokunuşta true olur, sonra mouse'u yoksayar
 
-  // Sol: hareket joystick
   moveJoy: { active: false, baseX: 0, baseY: 0, knobX: 0, knobY: 0, id: null },
-  // Sağ: nişan joystick (bırakınca ateş)
   aimJoy:  { active: false, baseX: 0, baseY: 0, knobX: 0, knobY: 0, id: null },
 
   fireRequested: false,
+  fireAngle: null,    // bırakınca ateş edilecek açı
 
   canvas: null,
   JOY_RADIUS: 70,
@@ -25,33 +25,38 @@ const Input = {
       this.keys[e.key.toLowerCase()] = false;
     });
 
-    // Fare (PC)
+    // Pointer olayları (hepsi buradan)
+    canvas.addEventListener('pointerdown', (e) => this._down(e));
+    canvas.addEventListener('pointermove', (e) => this._move(e));
+    canvas.addEventListener('pointerup', (e) => this._up(e));
+    canvas.addEventListener('pointercancel', (e) => this._up(e));
+
+    // FARE (sadece touch değilse)
     canvas.addEventListener('mousemove', (e) => {
+      if (this.isTouch) return;
       this.mouseActive = true;
       const p = this._toCanvas(e.clientX, e.clientY);
       this.mouse.x = p.x;
       this.mouse.y = p.y;
     });
     canvas.addEventListener('mousedown', (e) => {
+      if (this.isTouch) return;
       if (e.pointerType === 'touch') return;
       this.mouse.down = true;
     });
-    window.addEventListener('mouseup', () => { this.mouse.down = false; });
+    window.addEventListener('mouseup', () => {
+      if (this.isTouch) return;
+      this.mouse.down = false;
+    });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
-    // Pointer (dokunmatik + kalem)
-    canvas.addEventListener('pointerdown', (e) => this._down(e));
-    canvas.addEventListener('pointermove', (e) => this._move(e));
-    canvas.addEventListener('pointerup', (e) => this._up(e));
-    canvas.addEventListener('pointercancel', (e) => this._up(e));
-
-    // Orientation lock (kullanıcı etkileşimi sonrası)
+    // Orientation lock (ilk etkileşimde dene)
     const lockOrientation = async () => {
       try {
         if (screen.orientation && screen.orientation.lock) {
           await screen.orientation.lock('landscape');
         }
-      } catch (err) { /* desteklemiyorsa sessiz */ }
+      } catch {}
       document.removeEventListener('click', lockOrientation);
       document.removeEventListener('touchstart', lockOrientation);
     };
@@ -68,9 +73,13 @@ const Input = {
   },
 
   _down(e) {
+    if (e.pointerType === 'touch' || e.pointerType === 'pen') {
+      this.isTouch = true;
+    }
     if (e.pointerType === 'mouse') return;
     e.preventDefault();
     try { this.canvas.setPointerCapture(e.pointerId); } catch {}
+
     const p = this._toCanvas(e.clientX, e.clientY);
     const half = this.canvas.width / 2;
 
@@ -124,18 +133,17 @@ const Input = {
       this.moveJoy.id = null;
     }
     if (this.aimJoy.active && this.aimJoy.id === e.pointerId) {
-      // Bırakınca ateş! (belirgin sürükleme varsa)
       const dx = this.aimJoy.knobX - this.aimJoy.baseX;
       const dy = this.aimJoy.knobY - this.aimJoy.baseY;
-      if (Math.hypot(dx, dy) > 20) {
+      if (Math.hypot(dx, dy) > 15) {
         this.fireRequested = true;
+        this.fireAngle = Math.atan2(dy, dx);   // ← ANLIK açıyı kaydet
       }
       this.aimJoy.active = false;
       this.aimJoy.id = null;
     }
   },
 
-  // Hareket vektörü (-1..1)
   getMoveVector() {
     if (!this.moveJoy.active) return { x: 0, y: 0 };
     const dx = this.moveJoy.knobX - this.moveJoy.baseX;
@@ -146,7 +154,6 @@ const Input = {
     return { x: (dx / len) * mag, y: (dy / len) * mag };
   },
 
-  // Nişan açısı (rad) veya null
   getAimAngle() {
     if (!this.aimJoy.active) return null;
     const dx = this.aimJoy.knobX - this.aimJoy.baseX;
@@ -171,5 +178,6 @@ const Input = {
     this.aimJoy.active = false;
     this.aimJoy.id = null;
     this.fireRequested = false;
+    this.fireAngle = null;
   },
 };
