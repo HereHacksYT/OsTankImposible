@@ -5,6 +5,51 @@ const H = canvas.height;
 
 Input.init(canvas);
 
+// --- SKOR SİSTEMİ (localStorage) ---
+const SCORES_KEY = 'ostank_scores';
+
+const Scores = {
+  load() {
+    try {
+      const raw = localStorage.getItem(SCORES_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  },
+
+  save(entry) {
+    const all = this.load();
+    all.unshift(entry);
+    // En fazla 50 kayıt tut
+    const trimmed = all.slice(0, 50);
+    try {
+      localStorage.setItem(SCORES_KEY, JSON.stringify(trimmed));
+    } catch {}
+  },
+
+  clear() {
+    try { localStorage.removeItem(SCORES_KEY); } catch {}
+  },
+
+  formatDuration(sec) {
+    sec = Math.max(0, Math.floor(sec));
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  },
+
+  formatDate(ts) {
+    const d = new Date(ts);
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mi = String(d.getMinutes()).padStart(2, '0');
+    return `${dd}/${mm} ${hh}:${mi}`;
+  },
+};
+
+// --- OYUN DURUMU ---
 const state = {
   mode: 'menu',       // 'menu' | 'playing' | 'over'
   difficulty: null,
@@ -12,6 +57,7 @@ const state = {
   ai: null,
   bullets: [],
   lastTime: 0,
+  startTime: 0,
   result: null,
 };
 
@@ -38,9 +84,12 @@ function startGame(difficulty) {
   state.mode = 'playing';
   state.result = null;
   state.lastTime = performance.now();
+  state.startTime = performance.now();
 
   Input.reset();
+
   document.getElementById('menu').classList.add('hidden');
+  document.getElementById('scores').classList.add('hidden');
   document.getElementById('gameover').classList.add('hidden');
 
   requestAnimationFrame(loop);
@@ -55,7 +104,9 @@ function loop(now) {
   update(dt);
   render();
 
-  requestAnimationFrame(loop);
+  if (state.mode === 'playing') {
+    requestAnimationFrame(loop);
+  }
 }
 
 function update(dt) {
@@ -88,7 +139,7 @@ function update(dt) {
     const target = b.owner === 'player' ? a : p;
     if (target.alive) {
       const d = Math.hypot(b.x - target.x, b.y - target.y);
-      if (d < target.radius + b.radius) {
+      if (d state < target.radius + b.radius) {
         target.takeDamage();
         b.dead = true;
       }
@@ -101,7 +152,7 @@ function update(dt) {
   if (!p.alive || !a.alive) {
     state.mode = 'over';
     state.result = p.alive ? 'win' : 'lose';
-    showGameOver();
+    onGameOver();
   }
 }
 
@@ -120,7 +171,7 @@ function render() {
 
 function drawUI() {
   drawHP(20, 20, state.player.hp, state.player.maxHp, '#4aa3ff', 'SEN');
-  drawHP(W - 220, 20, state.ai.hp, state.ai.maxHp, '#ff4444', 'DÜŞMAN');
+  drawHP(W - 220, 20.ai.maxHp, '#ff4444', 'DÜŞMAN');
 }
 
 function drawHP(x, y, hp, maxHp, color, label) {
@@ -137,7 +188,17 @@ function drawHP(x, y, hp, maxHp, color, label) {
   }
 }
 
-function showGameOver() {
+function onGameOver() {
+  const duration = (performance.now() - state.startTime) / 1000;
+
+  // Skoru kaydet
+  Scores.save({
+    difficulty: state.difficulty,
+    result: state.result,
+    duration: Math.round(duration),
+    date: Date.now(),
+  });
+
   const el = document.getElementById('gameover');
   const title = document.getElementById('go-title');
   const sub = document.getElementById('go-sub');
@@ -145,21 +206,58 @@ function showGameOver() {
   if (state.result === 'win') {
     title.textContent = 'KAZANDIN!';
     title.style.color = '#2288dd';
-    sub.textContent = 'Ama daha zoru var...';
+    sub.textContent = `Süre: ${Scores.formatDuration(duration)} — Ama daha zoru var...`;
   } else {
     title.textContent = 'KAYBETTİN!';
     title.style.color = '#cc1111';
-    sub.textContent = 'Tekrar dene.';
+    sub.textContent = `Süre: ${Scores.formatDuration(duration)} — Tekrar dene.`;
   }
 
   el.classList.remove('hidden');
 }
 
-// Menü butonları
+// --- SKOR TABLOSU RENDER ---
+function renderScores() {
+  const list = Scores.load();
+  const sub = document.getElementById('scores-sub');
+  const table = document.getElementById('scores-table');
+  const body = document.getElementById('scores-body');
+
+  body.innerHTML = '';
+
+  if (list.length === 0) {
+    sub.textContent = 'Henüz oynanmış oyun yok.';
+    sub.style.display = 'block';
+    table.classList.add('hidden');
+    return;
+  }
+
+  sub.style.display = 'none';
+  table.classList.remove('hidden');
+
+  list.forEach((s, i) => {
+    const tr = document.createElement('tr');
+
+    const dLabel = s.difficulty === 'zor' ? 'ZOR'
+                 : s.difficulty === 'normal' ? 'NORMAL'
+                 : s.difficulty === 'impossible' ? 'İMKANSIZ'
+                 : s.difficulty;
+
+    tr.innerHTML = `
+      <td>${i + 1}</td>
+      <td class="d-${s.difficulty}">${dLabel}</td>
+      <td class="${s.result === 'win' ? 'win' : 'lose'}">${s.result === 'win' ? 'KAZANDI' : 'KAYBETTİ'}</td>
+      <td>${Scores.formatDuration(s.duration)}</td>
+      <td>${Scores.formatDate(s.date)}</td>
+    `;
+    body.appendChild(tr);
+  });
+}
+
+// --- MENÜ OLAYLARI ---
 document.querySelectorAll('.diff').forEach((btn) => {
   btn.addEventListener('click', () => {
     if (btn.classList.contains('locked')) {
-      // İmkansız: hiçbir şey olmasın, sadece salla
       btn.classList.add('shake');
       setTimeout(() => btn.classList.remove('shake'), 300);
       return;
@@ -168,8 +266,30 @@ document.querySelectorAll('.diff').forEach((btn) => {
   });
 });
 
+document.getElementById('scores-btn').addEventListener('click', () => {
+  renderScores();
+  document.getElementById('menu').classList.add('hidden');
+  document.getElementById('scores').classList.remove('hidden');
+});
+
+document.getElementById('scores-back').addEventListener('click', () => {
+  document.getElementById('scores').classList.add('hidden');
+  document.getElementById('menu').classList.remove('hidden');
+});
+
+document.getElementById('scores-clear').addEventListener('click', () => {
+  if (confirm('Tüm skorlar silinsin mi?')) {
+    Scores.clear();
+    renderScores();
+  }
+});
+
 document.getElementById('go-btn').addEventListener('click', () => {
   state.mode = 'menu';
   document.getElementById('gameover').classList.add('hidden');
   document.getElementById('menu').classList.remove('hidden');
+});
+
+document.getElementById('go-again').addEventListener('click', () => {
+  startGame(state.difficulty);
 });
