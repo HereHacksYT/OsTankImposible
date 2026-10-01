@@ -7,7 +7,7 @@ class Bullet {
     this.vy = vy;
     this.owner = owner; // 'player' | 'ai'
     this.radius = 4;
-    this.life = 7;      // saniye
+    this.life = 7;
     this.dead = false;
     this.trail = [];
   }
@@ -18,18 +18,18 @@ class Bullet {
 
     // İz kaydı
     this.trail.push({ x: this.x, y: this.y });
-    if (this.trail.length > 8) this.trail.shift();
+    if (this.trail.length > 10) this.trail.shift();
 
-    // X ekseninde hareket + sekme
-    const nx = this.x + this.vx;
+    // X ekseni: hız * dt (saniye cinsinden!)
+    const nx = this.x + this.vx * dt;
     if (Maze.circleHitsWall(nx, this.y, this.radius)) {
       this.vx = -this.vx;
     } else {
       this.x = nx;
     }
 
-    // Y ekseninde hareket + sekme
-    const ny = this.y + this.vy;
+    // Y ekseni
+    const ny = this.y + this.vy * dt;
     if (Maze.circleHitsWall(this.x, ny, this.radius)) {
       this.vy = -this.vy;
     } else {
@@ -39,7 +39,7 @@ class Bullet {
 
   draw(ctx) {
     // İz
-    ctx.strokeStyle = 'rgba(255, 200, 80, 0.45)';
+    ctx.strokeStyle = 'rgba(255, 200, 80, 0.5)';
     ctx.lineWidth = 2;
     ctx.beginPath();
     for (let i = 0; i < this.trail.length; i++) {
