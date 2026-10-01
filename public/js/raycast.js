@@ -1,10 +1,10 @@
-// Işın izleme — AI'nın sekmeli atışları, dodging ve pozisyon optimizasyonu
+// Işın izleme + mermi simülasyonu + pozisyon değerlendirme
 const RayCast = {
   STEP: 4,
   MAX_DIST: 2000,
   BULLET_RADIUS: 4,
 
-  // Tek ışın at → duvarlardan seker → hedefe çarpar mı?
+  // Tek ışın at → sekmeler → hedefe çarpar mı?
   cast(sx, sy, angle, target, maxBounces) {
     let x = sx;
     let y = sy;
@@ -28,20 +28,13 @@ const RayCast = {
         }
       }
 
-      let hitThisStep = false;
-      if (Maze.circleHitsWall(nx, y, this.BULLET_RADIUS)) {
-        vx = -vx;
-        hitThisStep = true;
-      } else {
-        x = nx;
-      }
-      if (Maze.circleHitsWall(x, ny, this.BULLET_RADIUS)) {
-        vy = -vy;
-        hitThisStep = true;
-      } else {
-        y = ny;
-      }
-      if (hitThisStep) {
+      let hit = false;
+      if (Maze.circleHitsWall(nx, y, this.BULLET_RADIUS)) { vx = -vx; hit = true; }
+      else x = nx;
+      if (Maze.circleHitsWall(x, ny, this.BULLET_RADIUS)) { vy = -vy; hit = true; }
+      else y = ny;
+
+      if (hit) {
         bounces++;
         if (bounces > maxBounces) break;
       }
@@ -50,7 +43,53 @@ const RayCast = {
     return { hit: false, bounces, traveled, angle };
   },
 
-  // En iyi açıları bul — hareket tahmini 4 iterasyon
+  // === YENİ: Mermi yolunu ileri sar (tehdit analizi için) ===
+  // Bir merminin gelecekteki tüm konumlarını döndürür
+  simulateBulletPath(x, y, vx, vy, maxTime, maxBounces) {
+    const dt = 0.04;
+    const path = [{ x, y, t: 0 }];
+    let t = 0;
+    let bounces = 0;
+    let remaining = maxTime;
+
+    while (remaining > 0 && bounces <= maxBounces) {
+      const nx = x + vx * dt;
+      if (Maze.circleHitsWall(nx, y, this.BULLET_RADIUS)) { vx = -vx; bounces++; }
+      else x = nx;
+
+      const ny = y + vy * dt;
+      if (Maze.circleHitsWall(x, ny, this.BULLET_RADIUS)) { vy = -vy; bounces++; }
+      else y = ny;
+
+      t += dt;
+      remaining -= dt;
+      path.push({ x, y, t });
+    }
+    return path;
+  },
+
+  // === YENİ: Pozisyon tehlikede mi? (gerçek mermi yoluyla) ===
+  isPositionUnsafe(x, y, radius, bullets, timeAhead) {
+    const margin = radius + this.BULLET_RADIUS + 8;
+    const marginSq = margin * margin;
+
+    for (const b of bullets) {
+      if (b.owner !== 'player') continue;
+      const path = this.simulateBulletPath(
+        b.x, b.y, b.vx, b.vy,
+        Math.min(timeAhead, b.life),
+        3
+      );
+      for (const p of path) {
+        const dx = p.x - x;
+        const dy = p.y - y;
+        if (dx * dx + dy * dy < marginSq) return true;
+      }
+    }
+    return false;
+  },
+
+  // === YENİ: En iyi atışları bul (4 iterasyon tahmin) ===
   findBestShots(sx, sy, target, targetVx, targetVy, maxBounces, rayCount) {
     if (rayCount === undefined) rayCount = 80;
     if (maxBounces === undefined) maxBounces = 3;
@@ -64,10 +103,10 @@ const RayCast = {
       const r1 = this.cast(sx, sy, angle, target, maxBounces);
       if (!r1.hit) continue;
 
-      // İteratif tahmin: mermi uçarken oyuncu nereye gider?
       let time = r1.traveled / bulletSpeed;
       let lastR = r1;
       let ok = true;
+
       for (let iter = 0; iter < 4; iter++) {
         const px = target.x + targetVx * time;
         const py = target.y + targetVy * time;
@@ -80,8 +119,7 @@ const RayCast = {
         lastR = r;
         time = r.traveled / bulletSpeed;
       }
-      if (!ok) continue;
-      if (time > 3.5) continue;
+      if (!ok || time > 3.5) continue;
 
       shots.push({
         angle,
@@ -97,56 +135,70 @@ const RayCast = {
     return shots;
   },
 
-  // Belirli bir noktada belirli zaman sonra tehlike var mı? (mermi simülasyonu)
-  isDangerousAt(x, y, radius, bullets, timeAhead) {
-    const stepTime = 0.06;
-    for (const b of bullets) {
-      if (b.owner !== 'player') continue;
+  // === YENİ: Pozisyon puanlama (yüksek = iyi) ===
+  scorePosition(px, py, tank, player, bullets, maxBounces) {
+    if (Maze.circleHitsWall(px, py, tank.radius)) return -Infinity;
 
-      let bx = b.x, by = b.y;
-      let vx = b.vx, vy = b.vy;
+    let score = 0;
 
-      for (let t = 0; t <= timeAhead; t += stepTime) {
-        const nx = bx + vx * stepTime;
-        if (Maze.circleHitsWall(nx, by, this.BULLET_RADIUS)) vx = -vx;
-        else bx = nx;
+    // 1) Güvenlik (kısa + orta vadeli)
+    const safeShort = !this.isPositionUnsafe(px, py, tank.radius + 6, bullets, 0.6);
+    const safeMid   = !this.isPositionUnsafe(px, py, tank.radius + 6, bullets, 1.6);
+    if (safeShort) score += 5;
+    if (safeMid)   score += 3;
 
-        const ny = by + vy * stepTime;
-        if (Maze.circleHitsWall(bx, ny, this.BULLET_RADIUS)) vy = -vy;
-        else by = ny;
-
-        const d = Math.hypot(bx - x, by - y);
-        if (d < radius + this.BULLET_RADIUS + 8) return true;
-      }
+    // 2) Atış kalitesi
+    const shots = this.findBestShots(
+      px, py, player,
+      player._pvx || 0, player._pvy || 0,
+      maxBounces, 24
+    );
+    if (shots.length > 0) {
+      const s = shots[0];
+      score += 8 / (s.time + 0.4 + s.bounces * 0.3);
+      if (s.bounces === 0) score += 2;       // direkt görüş bonusu
+    } else {
+      score -= 4; // vuruş yoksa ceza
     }
-    return false;
+
+    // 3) Mesafe tercihi
+    const dist = Math.hypot(px - player.x, py - player.y);
+    score += 2 - Math.abs(dist - 240) / 200;
+
+    // 4) Siper bonusu (yakında 2-4 duvar varsa ideal peek noktası)
+    let wallCount = 0;
+    for (let a = 0; a < 8; a++) {
+      const ang = (a / 8) * Math.PI * 2;
+      const wx = px + Math.cos(ang) * 45;
+      const wy = py + Math.sin(ang) * 45;
+      if (Maze.isWallAt(wx, wy)) wallCount++;
+    }
+    if (wallCount >= 2 && wallCount <= 4) score += 1.5;
+
+    // 5) Kaçış yolu sayısı
+    let escapes = 0;
+    for (let a = 0; a < 8; a++) {
+      const ang = (a / 8) * Math.PI * 2;
+      const ex = px + Math.cos(ang) * 70;
+      const ey = py + Math.sin(ang) * 70;
+      if (!Maze.circleHitsWall(ex, ey, tank.radius)) escapes++;
+    }
+    score += escapes * 0.35;
+
+    return score;
   },
 
-  // Güvenli yönleri bul (12 yön, 50px test)
-  findSafeDirections(tank, bullets, timeAhead) {
-    const safe = [];
-    const testDist = 55;
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * Math.PI * 2;
-      const tx = tank.x + Math.cos(a) * testDist;
-      const ty = tank.y + Math.sin(a) * testDist;
-      if (Maze.circleHitsWall(tx, ty, tank.radius)) continue;
-      if (this.isDangerousAt(tx, ty, tank.radius, bullets, timeAhead)) continue;
-      safe.push({ angle: a, x: tx, y: ty });
-    }
-    return safe;
-  },
-
-  // En iyi pozisyon: hem güvenli hem vurabilir
+  // === YENİ: Yakınlardaki en iyi pozisyonu bul ===
   findBestPosition(tank, player, bullets, maxBounces) {
     const candidates = [{ x: tank.x, y: tank.y }];
-    const dists = [70, 140];
-    const angles = 8;
-    for (const d of dists) {
-      for (let i = 0; i < angles; i++) {
-        const a = (i / angles) * Math.PI * 2;
-        const x = tank.x + Math.cos(a) * d;
-        const y = tank.y + Math.sin(a) * d;
+    const R = 130;
+    const step = 38;
+
+    for (let dx = -R; dx <= R; dx += step) {
+      for (let dy = -R; dy <= R; dy += step) {
+        if (dx === 0 && dy === 0) continue;
+        const x = tank.x + dx;
+        const y = tank.y + dy;
         if (Maze.circleHitsWall(x, y, tank.radius)) continue;
         candidates.push({ x, y });
       }
@@ -154,26 +206,11 @@ const RayCast = {
 
     let best = null;
     let bestScore = -Infinity;
-
     for (const c of candidates) {
-      const shots = this.findBestShots(
-        c.x, c.y, player,
-        player._pvx || 0, player._pvy || 0,
-        maxBounces, 20
-      );
-      if (shots.length === 0) continue;
-
-      const shotScore = 2 / (shots[0].time + 0.3 + shots[0].bounces * 0.3);
-      const safe = !this.isDangerousAt(c.x, c.y, tank.radius + 6, bullets, 1.2);
-      const safeScore = safe ? 2.0 : 0;
-
-      const dist = Math.hypot(c.x - player.x, c.y - player.y);
-      const distScore = 1.2 - Math.abs(dist - 240) / 500;
-
-      const total = shotScore + safeScore + distScore;
-      if (total > bestScore) {
-        bestScore = total;
-        best = { ...c, shots };
+      const s = this.scorePosition(c.x, c.y, tank, player, bullets, maxBounces);
+      if (s > bestScore) {
+        bestScore = s;
+        best = c;
       }
     }
     return best;
