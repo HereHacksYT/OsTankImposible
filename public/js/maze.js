@@ -10,7 +10,7 @@ const Maze = {
     do {
       this._generateRaw();
       attempts++;
-    } while (!this.isConnected() && attempts < 25);
+    } while (!this.isConnected() && attempts < 40);
   },
 
   _generateRaw() {
@@ -27,17 +27,41 @@ const Maze = {
       this.grid.push(row);
     }
 
-    // İçeriye rastgele bloklar
-    const count = 32;
+    // Rastgele bloklar (yoğun + dikdörtgen karışık)
+    const count = 48;
     for (let i = 0; i < count; i++) {
-      const x = 1 + Math.floor(Math.random() * (cols - 2));
-      const y = 1 + Math.floor(Math.random() * (rows - 2));
-      if (this.grid[y][x] === 0) this.grid[y][x] = 1;
+      const x = 1 + Math.floor(Math.random() * (cols - 4));
+      const y = 1 + Math.floor(Math.random() * (rows - 4));
+
+      // Boyut seçimi: tekli, 2x1, 1x2, 2x2
+      const r = Math.random();
+      let w = 1, h = 1;
+      if (r < 0.30) { w = 2; h = 1; }
+      else if (r < 0.60) { w = 1; h = 2; }
+      else if (r < 0.75) { w = 2; h = 2; }
+
+      // Alan boş mu kontrolü
+      let clear = true;
+      for (let j = 0; j < h; j++) {
+        for (let k = 0; k < w; k++) {
+          if (y + j >= rows - 1 || x + k >= cols - 1) { clear = false; break; }
+          if (this.grid[y + j][x + k] === 1) { clear = false; break; }
+        }
+        if (!clear) break;
+      }
+      if (!clear) continue;
+
+      // Yerleştir
+      for (let j = 0; j < h; j++) {
+        for (let k = 0; k < w; k++) {
+          this.grid[y + j][x + k] = 1;
+        }
+      }
     }
 
-    // Spawn bölgelerini temizle
-    this.clearArea(2, 1, 3, 2);              // AI: sol-üst
-    this.clearArea(cols - 5, rows - 3, 3, 2); // Oyuncu: sağ-alt
+    // Spawn alanlarını temizle (biraz daha geniş)
+    this.clearArea(2, 1, 4, 3);
+    this.clearArea(cols - 6, rows - 4, 4, 3);
   },
 
   clearArea(x, y, w, h) {
@@ -50,7 +74,6 @@ const Maze = {
     }
   },
 
-  // İki spawn arasında yol var mı? (flood fill)
   isConnected() {
     const start = { x: 3, y: 2 };
     const end = { x: this.cols - 4, y: this.rows - 3 };
@@ -90,7 +113,6 @@ const Maze = {
     return this.isWallTile(cx, cy);
   },
 
-  // Daire duvara temas ediyor mu? (4 köşe kontrolü)
   circleHitsWall(px, py, r) {
     return (
       this.isWallAt(px - r, py - r) ||
