@@ -1,10 +1,6 @@
 services:
   - type: web
     name: ostank-imposible
-    env: node
-    plan: free
-    buildCommand: npm install
-    startCommand: npm start
-    envVars:
-      - key: NODE_VERSION
-        value: "18.20.4"
+    env: static
+    staticPublishPath: ./public
+    buildCommand: ""
