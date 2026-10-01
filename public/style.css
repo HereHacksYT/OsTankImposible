@@ -243,3 +243,24 @@ button {
   .sub { font-size: 3cqw; }
   .diff { font-size: 4cqw; }
 }
+
+/* ORIENTATION LOCK - portrede uyarı */
+#rotate-warning {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: #111;
+  color: #fff;
+  z-index: 9999;
+  align-items: center;
+  justify-content: center;
+  font-size: 5vmin;
+  text-align: center;
+  padding: 30px;
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+
+@media (orientation: portrait) {
+  #rotate-warning { display: flex; }
+}
